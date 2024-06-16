@@ -1,0 +1,7 @@
+EventHubConfig:
+  connection: "connection"
+
+ControllerConfig:
+  Frequency: 1
+  MaxDataPoint: 20
+  DataDefinition: /Users/christophebuffard/Documents/Dev/github.com/oem-sim-g/assets.jsonl
