@@ -21,8 +21,9 @@ func (d Display) SendAlarm(events model.Events) error {
 
 	buf, err = json.Marshal(events)
 	if err != nil {
-		return errors.Join(err, errors.New("failed to marshal event display.SendAlarm"))
+		return errors.Join(err, errors.New("failed to marshal event display.CreateAlarm"))
 	}
+
 	display(string(buf))
 
 	return nil

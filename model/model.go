@@ -23,5 +23,5 @@ type Events struct {
 }
 
 type IService interface {
-	SendAlarm(events Events) error
+	CreateAlarm(event string, oemAlarm string)
 }

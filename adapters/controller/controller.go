@@ -9,6 +9,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/Go-routine-4595/oem-sim-g/model"
 )
 
 type ControllerConfig struct {
@@ -20,7 +22,7 @@ type Controller struct {
 	frequency      int
 	maxDataPoint   int
 	dataDefinition []DataDefinition
-	alarmSvc       IAlarmService
+	alarmSvc       model.IService
 }
 
 type DataDefinition struct {
@@ -28,11 +30,7 @@ type DataDefinition struct {
 	AssetOemAlarms []string `json:"asset_oem_alarm"`
 }
 
-type IAlarmService interface {
-	Alarm(assetName string, oemAlarm string)
-}
-
-func NewController(conf ControllerConfig, a IAlarmService) Controller {
+func NewController(conf ControllerConfig, a model.IService) Controller {
 
 	f, err := os.Open(conf.DataDefinition)
 	if err != nil {
@@ -41,6 +39,7 @@ func NewController(conf ControllerConfig, a IAlarmService) Controller {
 	defer f.Close()
 
 	// Create a new Scanner for the file
+	// jsonl (json object on each line)
 	scanner := bufio.NewScanner(f)
 
 	var dataDef []DataDefinition
@@ -74,7 +73,7 @@ func (c Controller) Start(ctx context.Context, wg *sync.WaitGroup) {
 		wg.Add(1)
 		go func(def DataDefinition) {
 			for i := 0; i < c.maxDataPoint; i++ {
-				c.alarmSvc.Alarm(def.AssetID, def.AssetOemAlarms[i%len(def.AssetOemAlarms)])
+				c.alarmSvc.CreateAlarm(def.AssetID, def.AssetOemAlarms[i%len(def.AssetOemAlarms)])
 				select {
 				case <-ctx.Done():
 					fmt.Println("Controller: ", def.AssetID, "context received signal, shutting down...")

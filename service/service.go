@@ -3,20 +3,26 @@ package service
 import (
 	"github.com/Go-routine-4595/oem-sim-g/model"
 	"math/rand"
+	"sync"
 	"time"
 )
 
-type Service struct {
-	gateway model.IService
+type ISendAlarm interface {
+	SendAlarm(events model.Events) error
 }
 
-func NewService(g model.IService) Service {
-	return Service{
+type Service struct {
+	gateway ISendAlarm
+	lock    sync.Mutex
+}
+
+func NewService(g ISendAlarm) *Service {
+	return &Service{
 		gateway: g,
 	}
 }
 
-func (s Service) Alarm(assetName string, oemAlarm string) {
+func (s *Service) CreateAlarm(assetName string, oemAlarm string) {
 	var (
 		event    model.AssetEvent
 		aDataLat model.AssociatedData
@@ -25,7 +31,7 @@ func (s Service) Alarm(assetName string, oemAlarm string) {
 		r        int
 	)
 
-	r = rand.Intn(100)
+	//s.lock.Lock()
 
 	aDataLat = model.AssociatedData{
 		Name:      "GPSLatitudeofEquipment",
@@ -65,6 +71,7 @@ func (s Service) Alarm(assetName string, oemAlarm string) {
 		}
 		events.AssetEvents = append(events.AssetEvents, event)
 		s.gateway.SendAlarm(events)
+
 	}
 
 }

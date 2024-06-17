@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/display"
 	"github.com/Go-routine-4595/oem-sim-g/model"
-	"github.com/Go-routine-4595/oem-sim-g/service"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
 	"github.com/Go-routine-4595/oem-sim-g/adapters/controller"
+	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/display"
 	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/event-hub"
+	"github.com/Go-routine-4595/oem-sim-g/service"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,8 +27,8 @@ func main() {
 	var (
 		conf   Config
 		svr    controller.Controller
-		svc    service.Service
-		gtw    model.IService
+		svc    model.IService
+		gtw    display.Display
 		ctx    context.Context
 		cancel context.CancelFunc
 		sig    chan os.Signal
