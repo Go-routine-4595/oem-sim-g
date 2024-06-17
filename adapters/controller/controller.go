@@ -72,19 +72,18 @@ func (c Controller) Start(ctx context.Context, wg *sync.WaitGroup) {
 	for _, def := range c.dataDefinition {
 		wg.Add(1)
 		go func(def DataDefinition) {
+			defer wg.Done()
 			for i := 0; i < c.maxDataPoint; i++ {
 				c.alarmSvc.CreateAlarm(def.AssetID, def.AssetOemAlarms[i%len(def.AssetOemAlarms)])
 				select {
 				case <-ctx.Done():
 					fmt.Println("Controller: ", def.AssetID, "context received signal, shutting down...")
-					wg.Done()
 					return
 				default:
 					time.Sleep(time.Duration(c.frequency) * time.Second)
 				}
 			}
-			fmt.Println("Controller: ", def.AssetID, " context done")
-			wg.Done()
+			fmt.Println("Controller: ", def.AssetID, " done")
 		}(def)
 	}
 }
