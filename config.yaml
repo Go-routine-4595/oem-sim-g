@@ -1,5 +1,6 @@
 EventHubConfig:
-  connection: "connection"
+  connection: Endpoint=sb://FctsNAMemNADevlEvtHub01.servicebus.windows.net/;SharedAccessKeyName=<KeyName>
+  EventHubName: honeywell-uas-oem-alarms
 
 ControllerConfig:
   Frequency: 1

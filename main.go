@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Go-routine-4595/oem-sim-g/model"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -29,16 +30,19 @@ func main() {
 		svr    controller.Controller
 		svc    model.IService
 		gtw    display.Display
+		eh     *event_hub.EventHub
 		ctx    context.Context
 		cancel context.CancelFunc
 		sig    chan os.Signal
 		wg     *sync.WaitGroup
 		args   []string
+		err    error
 	)
 
 	args = os.Args
 
 	wg = &sync.WaitGroup{}
+	ctx, cancel = context.WithCancel(context.Background())
 
 	if len(args) == 1 {
 		conf = openConfigFile("")
@@ -46,12 +50,20 @@ func main() {
 		conf = openConfigFile(args[1])
 	}
 
-	gtw = display.NewDisplay()
-	svc = service.NewService(gtw)
+	// an event hub
+	eh, err = event_hub.NewEventHub(ctx, wg, conf.EventHubConfig)
+	if err != nil {
+		log.Println(err)
+		// or a Display if we fail to initiate a new event hub
+		gtw = display.NewDisplay()
+		svc = service.NewService(gtw)
+	} else {
+		svc = service.NewService(eh)
+	}
 
 	svr = controller.NewController(conf.ControllerConfig, svc)
 	svr.Test()
-	ctx, cancel = context.WithCancel(context.Background())
+
 	svr.Start(ctx, wg)
 
 	sig = make(chan os.Signal, 1)
