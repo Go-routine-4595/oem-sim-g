@@ -80,7 +80,7 @@ func (c Controller) Start(ctx context.Context, wg *sync.WaitGroup) {
 					fmt.Println("Controller: ", def.AssetID, "context received signal, shutting down...")
 					return
 				default:
-					time.Sleep(time.Duration(c.frequency) * time.Second)
+					time.Sleep(time.Duration(c.frequency) * time.Millisecond)
 				}
 			}
 			fmt.Println("Controller: ", def.AssetID, " done")

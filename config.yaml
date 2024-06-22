@@ -3,6 +3,6 @@ EventHubConfig:
   EventHubName: honeywell-uas-oem-alarms
 
 ControllerConfig:
-  Frequency: 1
+  Frequency: 1000
   MaxDataPoint: 20
   DataDefinition: /Users/christophebuffard/Documents/Dev/github.com/oem-sim-g/assets.jsonl
