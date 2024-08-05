@@ -2,6 +2,10 @@ EventHubConfig:
   connection: Endpoint=sb://FctsNAMemNADevlEvtHub01.servicebus.windows.net/;SharedAccessKeyName=<KeyName>
   EventHubName: honeywell-uas-oem-alarms
 
+RabbitConfig:
+  ConnectionString: "amqps://mxgzljbw:OHbNiq1eBbjKWbEp5s4zxPBV76R_FJmM@chimpanzee.rmq.cloudamqp.com/mxgzljbw"
+  QueueName: "oem"
+
 ControllerConfig:
   Frequency: 1000
   MaxDataPoint: 20
