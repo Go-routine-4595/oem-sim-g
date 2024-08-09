@@ -1,0 +1,1 @@
+go mod graph | /Users/christophebuffard/Documents/Dev/go/bin/modgv | dot -Tpng -o graph.png

@@ -3,7 +3,7 @@ EventHubConfig:
   EventHubName: honeywell-uas-oem-alarms
 
 RabbitConfig:
-  ConnectionString: "amqps://mxgzljbw:OHbNiq1eBbjKWbEp5s4zxPBV76R_FJmM@chimpanzee.rmq.cloudamqp.com/mxgzljbw"
+  ConnectionString:
   QueueName: "oem"
 
 ControllerConfig:

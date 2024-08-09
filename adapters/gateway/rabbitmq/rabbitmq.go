@@ -104,7 +104,7 @@ func (r *RabbitMQ) Start(ctx context.Context, wg *sync.WaitGroup) {
 	go r.consume(ctx, wg)
 }
 
-// close gracefully shuts down the connection and channel
+// Close gracefully shuts down the connection and channel
 func (r *RabbitMQ) Close() error {
 	var err error
 
@@ -144,7 +144,7 @@ func (r *RabbitMQ) consume(ctx context.Context, wg *sync.WaitGroup) {
 		}
 	}()
 
-	r.logger.Info().Msg("Wating")
+	r.logger.Info().Msg("Waiting")
 	<-ctx.Done()
 	// disconnect gracefully and leave
 	r.Close()
