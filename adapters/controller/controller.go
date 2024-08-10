@@ -34,7 +34,7 @@ func NewController(conf ControllerConfig, a model.IService) Controller {
 
 	f, err := os.Open(conf.DataDefinition)
 	if err != nil {
-		processError(errors.Join(err, errors.New("open assets.jsonl file")))
+		processError(errors.Join(err, fmt.Errorf("file: %s", conf.DataDefinition)))
 	}
 	defer f.Close()
 
