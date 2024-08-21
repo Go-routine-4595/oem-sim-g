@@ -131,7 +131,7 @@ func execute(file string, sysConf int) {
 	}
 
 	svr = controller.NewController(conf.ControllerConfig, svc)
-	svr.Test()
+	//svr.Test()
 
 	svr.Start(ctx, wg)
 

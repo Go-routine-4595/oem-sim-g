@@ -41,13 +41,37 @@ func NewController(conf ControllerConfig, a model.IService) Controller {
 	// Create a new Scanner for the file
 	// jsonl (json object on each line)
 	scanner := bufio.NewScanner(f)
+	buf := make([]byte, 0, 1024*1024) // Create a buffer with a larger capacity
+	scanner.Buffer(buf, 1024*1024)    // Set the maximum token size to 1 MB
 
 	var dataDef []DataDefinition
+
+	/*
+		reader := bufio.NewReader(f)
+			for {
+				var item DataDefinition
+
+				line, err := reader.ReadBytes('\n')
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					fmt.Println("Error reading file:", err)
+				}
+				err = json.Unmarshal(line, &item)
+				if err != nil {
+					processError(err)
+				}
+				dataDef = append(dataDef, item)
+				fmt.Print(line)
+			}
+	*/
 
 	for scanner.Scan() {
 		var item DataDefinition
 
 		if len(scanner.Bytes()) != 0 {
+			//fmt.Println(scanner.Text())
 			err = json.Unmarshal(scanner.Bytes(), &item)
 			if err != nil {
 				processError(err)
