@@ -31,6 +31,7 @@ func (s *Service) CreateAlarm(assetName string, oemAlarm string) {
 		r        int
 	)
 
+	r = rand.Intn(100)
 	//s.lock.Lock()
 
 	aDataLat = model.AssociatedData{

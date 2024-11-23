@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/display"
-	"github.com/Go-routine-4595/oem-sim-g/model"
 	"log"
 	"os"
 	"os/signal"
@@ -13,8 +11,11 @@ import (
 	"syscall"
 
 	"github.com/Go-routine-4595/oem-sim-g/adapters/controller"
+	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/display"
 	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/event-hub"
+	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/mqtt"
 	"github.com/Go-routine-4595/oem-sim-g/adapters/gateway/rabbitmq"
+	"github.com/Go-routine-4595/oem-sim-g/model"
 	"github.com/Go-routine-4595/oem-sim-g/service"
 
 	"github.com/spf13/cobra"
@@ -25,12 +26,14 @@ type Config struct {
 	event_hub.EventHubConfig    `yaml:"EventHubConfig"`
 	controller.ControllerConfig `yaml:"ControllerConfig"`
 	rabbitmq.RabbitMQConfig     `yaml:"RabbitConfig"`
+	mqtt.MqttConf               `yaml:"Mqtt"`
 }
 
 const (
 	Display = iota
 	EventHub
 	Rabbit
+	Mqtt
 )
 
 func main() {
@@ -60,8 +63,9 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			eh, _ := cmd.Flags().GetBool("eh")
 			rmq, _ := cmd.Flags().GetBool("rmq")
+			cmqtt, _ := cmd.Flags().GetBool("mqtt")
 
-			if !eh && !rmq {
+			if !eh && !rmq && !cmqtt {
 				fmt.Println("Error: You must provide at least one of the flags --eh or --rmq")
 				cmd.Help() // Display help information
 				os.Exit(1)
@@ -75,12 +79,17 @@ func main() {
 				fmt.Println("Sending via RabbitMQ")
 				execute(configFile, Rabbit)
 			}
+			if cmqtt {
+				fmt.Println("Sending via MQTT")
+				execute(configFile, Mqtt)
+			}
 		},
 	}
 
 	// Define flags for send command
 	sendCmd.Flags().Bool("eh", false, "Send using Event Hub (end-point and Event Hub defined in config.yaml)")
 	sendCmd.Flags().Bool("rmq", false, "Send using RabbitMQ (end-point and RabbitMQ defined in config.yaml)")
+	sendCmd.Flags().Bool("mqtt", false, "Send using MQTT (end-point and MQTT defined in config.yaml)")
 
 	rootCmd.AddCommand(displayCmd)
 	rootCmd.AddCommand(sendCmd)
@@ -100,6 +109,7 @@ func execute(file string, sysConf int) {
 		gtw    display.Display
 		eh     *event_hub.EventHub
 		rabbit *rabbitmq.RabbitMQ
+		cmqtt  *mqtt.Mqtt
 		ctx    context.Context
 		cancel context.CancelFunc
 		sig    chan os.Signal
@@ -128,6 +138,13 @@ func execute(file string, sysConf int) {
 		// Start the rabbit
 		rabbit.Start(ctx, wg)
 		svc = service.NewService(rabbit)
+	case Mqtt:
+		cmqtt, err = mqtt.NewMqtt(conf.MqttConf, 0, ctx)
+		//
+		if err != nil {
+			log.Fatal(err)
+		}
+		svc = service.NewService(cmqtt)
 	}
 
 	svr = controller.NewController(conf.ControllerConfig, svc)
