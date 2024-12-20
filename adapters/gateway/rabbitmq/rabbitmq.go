@@ -15,6 +15,12 @@ import (
 type RabbitMQConfig struct {
 	ConnectionString string `yaml:"ConnectionString"`
 	QueueName        string `yaml:"QueueName"`
+	Scheme           string `yaml:"Scheme"`
+	Host             string `yaml:"Host"`
+	Port             int    `yaml:"Port"`
+	UserName         string `yaml:"UserName"`
+	Password         string `yaml:"Password"`
+	Resource         string `yaml:"Resource"`
 }
 
 type RabbitMQ struct {
@@ -45,6 +51,7 @@ func (r *RabbitMQ) SendAlarm(events model.Events) error {
 	if err != nil {
 		return err
 	}
+	r.logger.Debug().Msgf("Sending alarm: %s \n", string(msg))
 	r.msgs <- msg
 	return nil
 }

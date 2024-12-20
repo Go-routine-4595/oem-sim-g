@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 	uuid "github.com/satori/go.uuid"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -28,13 +29,15 @@ type Mqtt struct {
 	client   pmqtt.Client
 }
 
-func NewMqtt(conf MqttConf, logl int, ctx context.Context) (*Mqtt, error) {
+func NewMqtt(conf MqttConf, logl int, ctx context.Context, wg *sync.WaitGroup) (*Mqtt, error) {
 	var (
 		err error
 		l   zerolog.Logger
 		cid uuid.UUID
 		//opt *pmqtt.ClientOptions
 	)
+
+	wg.Add(1)
 
 	l = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).Level(zerolog.InfoLevel+zerolog.Level(logl)).With().Timestamp().Int("pid", os.Getpid()).Logger()
 	cid = uuid.NewV4()
@@ -62,6 +65,7 @@ func NewMqtt(conf MqttConf, logl int, ctx context.Context) (*Mqtt, error) {
 	go func() {
 		<-ctx.Done()
 		c.client.Disconnect(250)
+		wg.Done()
 		c.logger.Warn().Msg("Mqtt disconnect")
 	}()
 
