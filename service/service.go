@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ISendAlarm interface {
@@ -54,11 +56,11 @@ func (s *Service) CreateAlarm(assetName string, oemAlarm string) {
 		EventName:      oemAlarm,
 		EventStatus:    "InActive",
 		Timestamp:      time.Now(),
-		CreatedUser:    "System",
+		CreatedUser:    uuid.New().String(),
 	}
 
 	events.AssetEvents = append(events.AssetEvents, event)
-	s.gateway.SendAlarm(events)
+	//s.gateway.SendAlarm(events)
 
 	if r%2 == 0 {
 		time.Sleep(time.Millisecond * time.Duration(10))
@@ -68,13 +70,11 @@ func (s *Service) CreateAlarm(assetName string, oemAlarm string) {
 			EventName:      oemAlarm,
 			EventStatus:    "Active",
 			Timestamp:      time.Now(),
-			CreatedUser:    "System",
+			CreatedUser:    uuid.New().String(),
 		}
 		events.AssetEvents = append(events.AssetEvents, event)
-		s.gateway.SendAlarm(events)
-
 	}
-
+	s.gateway.SendAlarm(events)
 }
 
 func getFakeLat() float64 {

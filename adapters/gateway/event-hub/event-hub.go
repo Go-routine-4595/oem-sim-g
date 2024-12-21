@@ -54,13 +54,13 @@ func NewEventHub(ctx context.Context, wg *sync.WaitGroup, conf EventHubConfig) (
 
 func (e EventHub) SendAlarm(events model.Events) error {
 	var (
-		buf             []byte
+		eventData       []byte
 		err             error
 		msg             *azeventhubs.EventData
 		newBatchOptions *azeventhubs.EventDataBatchOptions
 	)
 
-	buf, err = json.Marshal(events)
+	eventData, err = json.Marshal(events)
 	if err != nil {
 		return errors.Join(err, errors.New("failed to marshal event display.CreateAlarm"))
 	}
@@ -89,47 +89,51 @@ func (e EventHub) SendAlarm(events model.Events) error {
 		return errors.Join(err, errors.New("failed to create event data batch"))
 	}
 
-	msg = createEventForAlarm(buf)
-
-retry:
-	err = batch.AddEventData(msg, nil)
-
-	if errors.Is(err, azeventhubs.ErrEventDataTooLarge) {
-		if batch.NumEvents() == 0 {
-			// This one event is too large for this batch, even on its own. No matter what we do it
-			// will not be sendable at its current size.
-			return errors.Join(err, errors.New("failed to send alarm event is too large"))
-		}
-
-		// This batch is full - we can send it and create a new one and continue
-		// packaging and sending events.
-		if err = e.producerClient.SendEventDataBatch(context.TODO(), batch, nil); err != nil {
-			return errors.Join(err, errors.New("failed to send alarm couldn't send the event"))
-		}
-
-		// create the next batch we'll use for events, ensuring that we use the same options
-		// each time so all the messages go the same target.
-		tmpBatch, err := e.producerClient.NewEventDataBatch(context.TODO(), newBatchOptions)
-
-		if err != nil {
-			return errors.Join(err, errors.New("failed to send alarm couldn't create a new batch"))
-		}
-
-		batch = tmpBatch
-
-		// rewind so we can retry adding this event to a batch
-		goto retry
-	} else if err != nil {
-		return errors.Join(err, errors.New("failed to send alarm"))
+	msg = createEventForAlarm(eventData)
+	if err = e.addEventToBatch(batch, msg, newBatchOptions); err != nil {
+		return err
 	}
 
-	// if we have any events in the last batch, send it
+	return e.sendRemainingBatch(batch)
+
+}
+
+// addEventToBatch handles adding an event to a batch, retrying if necessary when the batch is full.
+func (e EventHub) addEventToBatch(batch *azeventhubs.EventDataBatch, event *azeventhubs.EventData, options *azeventhubs.EventDataBatchOptions) error {
+	for {
+		if err := batch.AddEventData(event, nil); err != nil {
+			if errors.Is(err, azeventhubs.ErrEventDataTooLarge) {
+				if batch.NumEvents() == 0 {
+					return errors.Join(err, errors.New("single event is too large for a batch"))
+				}
+				// This batch is full - we can send it and create a new one and continue
+				// packaging and sending events.
+				if err := e.producerClient.SendEventDataBatch(context.TODO(), batch, nil); err != nil {
+					return errors.Join(err, errors.New("failed to send current batch"))
+				}
+				// create the next batch we'll use for events, ensuring that we use the same options
+				// each time so all the messages go the same target.
+				newBatch, newBatchErr := e.producerClient.NewEventDataBatch(context.TODO(), options)
+				if newBatchErr != nil {
+					return errors.Join(newBatchErr, errors.New("failed to create a new batch after sending"))
+				}
+				batch = newBatch
+				continue
+			}
+			return errors.Join(err, errors.New("unexpected error while adding event to batch"))
+		}
+		break
+	}
+	return nil
+}
+
+// sendRemainingBatch sends any remaining events in a batch.
+func (e EventHub) sendRemainingBatch(batch *azeventhubs.EventDataBatch) error {
 	if batch.NumEvents() > 0 {
 		if err := e.producerClient.SendEventDataBatch(context.TODO(), batch, nil); err != nil {
-			return errors.Join(err, errors.New("failed to send alarm couldn't send the event"))
+			return errors.Join(err, errors.New("failed to send remaining batch"))
 		}
 	}
-
 	return nil
 }
 
