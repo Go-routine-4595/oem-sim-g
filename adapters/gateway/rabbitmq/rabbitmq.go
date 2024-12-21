@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/Go-routine-4595/oem-sim-g/model"
 	"os"
 	"sync"
@@ -15,23 +16,43 @@ import (
 type RabbitMQConfig struct {
 	ConnectionString string `yaml:"ConnectionString"`
 	QueueName        string `yaml:"QueueName"`
+	Scheme           string `yaml:"Scheme"`
+	Host             string `yaml:"Host"`
+	Port             int    `yaml:"Port"`
+	UserName         string `yaml:"UserName"`
+	Password         string `yaml:"Password"`
+	Resource         string `yaml:"Resource"`
 }
 
 type RabbitMQ struct {
 	ConnectionString string
 	QueueName        string
-	msgs             chan []byte
+	messageQueue     chan []byte
 	logger           zerolog.Logger
 	conn             *amqp.Connection
 	ch               *amqp.Channel
 }
 
+const (
+	defaultLogLevel = zerolog.DebugLevel
+)
+
+// Factory method for logger
+func createLogger() zerolog.Logger {
+	return zerolog.New(os.Stdout).
+		Level(defaultLogLevel).
+		With().
+		Timestamp().
+		Logger()
+}
+
+// NewRabbitMQ initializes the RabbitMQ struct with a predefined logger
 func NewRabbitMQ(config RabbitMQConfig) *RabbitMQ {
 	return &RabbitMQ{
-		msgs:             make(chan []byte),
+		messageQueue:     make(chan []byte),
 		ConnectionString: config.ConnectionString,
 		QueueName:        config.QueueName,
-		logger:           zerolog.New(os.Stdout).Level(zerolog.Level(zerolog.DebugLevel)).With().Timestamp().Logger(),
+		logger:           createLogger(),
 	}
 }
 
@@ -45,26 +66,30 @@ func (r *RabbitMQ) SendAlarm(events model.Events) error {
 	if err != nil {
 		return err
 	}
-	r.msgs <- msg
+	r.logger.Debug().Msgf("Sending alarm: %s \n", string(msg))
+	r.messageQueue <- msg
 	return nil
 }
 
 // connect establishes a new connection and channel
 func (r *RabbitMQ) connect() error {
 	var (
-		err error
+		err  error
+		conn *amqp.Connection
+		ch   *amqp.Channel
 	)
-	r.conn, err = amqp.Dial(r.ConnectionString)
+	conn, err = amqp.Dial(r.ConnectionString)
 	if err != nil {
 		return err
 	}
 
-	r.ch, err = r.conn.Channel()
+	ch, err = conn.Channel()
 	if err != nil {
+		_ = conn.Close() // Ensure connection is closed if the channel fails
 		return err
 	}
 
-	_, err = r.ch.QueueDeclare(
+	_, err = ch.QueueDeclare(
 		r.QueueName, // name
 		true,        // durable
 		false,       // delete when unused
@@ -73,8 +98,12 @@ func (r *RabbitMQ) connect() error {
 		nil,         // arguments
 	)
 	if err != nil {
+		_ = conn.Close() // Close connection on error
 		return err
 	}
+
+	r.conn = conn
+	r.ch = ch
 
 	return nil
 }
@@ -108,6 +137,9 @@ func (r *RabbitMQ) Start(ctx context.Context, wg *sync.WaitGroup) {
 func (r *RabbitMQ) Close() error {
 	var err error
 
+	if r.conn == nil {
+		return errors.New("connection is already closed or not initialized")
+	}
 	err = r.conn.Close()
 	if err != nil {
 		return err
@@ -116,39 +148,42 @@ func (r *RabbitMQ) Close() error {
 	return nil
 }
 
+// consume continuously publishes messages from the queue
 func (r *RabbitMQ) consume(ctx context.Context, wg *sync.WaitGroup) {
 	var (
 		err error
 	)
 	wg.Add(1)
-
-	go func() {
-		for {
-			for msg := range r.msgs {
-				// Publish a message
-				err = r.ch.Publish(
-					"",          // Exchange
-					r.QueueName, // Routing key (queue name)
-					false,       // Mandatory
-					false,       // Immediate
-					amqp.Publishing{
-						ContentType: "text/plain",
-						Body:        []byte(msg),
-					},
-				)
-				if err != nil {
-					r.logger.Error().Err(err).Msg("Failed to publish a message")
-					r.reconnect()
-				}
-			}
-		}
-	}()
-
 	r.logger.Info().Msg("Waiting")
-	<-ctx.Done()
-	// disconnect gracefully and leave
-	r.Close()
-	r.logger.Info().Msg("Received interrupt signal, closing connection")
-	wg.Done()
-	return
+
+	for {
+		select {
+		case msg := <-r.messageQueue:
+			// Publish a message
+			err = r.publishMessage(msg)
+			if err != nil {
+				r.logger.Error().Err(err).Msg("Failed to publish a message")
+				r.reconnect()
+			}
+		case <-ctx.Done():
+			r.logger.Info().Msg("Received interrupt signal, closing connection")
+			r.Close()
+			wg.Done()
+			return
+		}
+	}
+}
+
+// publishMessage simplifies message publishing logic
+func (r *RabbitMQ) publishMessage(msg []byte) error {
+	return r.ch.Publish(
+		"",          // Exchange
+		r.QueueName, // Routing key (queue name)
+		false,       // Mandatory
+		false,       // Immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        msg,
+		},
+	)
 }

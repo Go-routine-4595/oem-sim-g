@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -18,6 +18,7 @@ import (
 	"github.com/Go-routine-4595/oem-sim-g/model"
 	"github.com/Go-routine-4595/oem-sim-g/service"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -114,10 +115,12 @@ func execute(file string, sysConf int) {
 		cancel context.CancelFunc
 		sig    chan os.Signal
 		wg     *sync.WaitGroup
+		wgG    *sync.WaitGroup
 		err    error
 	)
 
 	wg = &sync.WaitGroup{}
+	wgG = &sync.WaitGroup{}
 	ctx, cancel = context.WithCancel(context.Background())
 
 	conf = openConfigFile(file)
@@ -130,19 +133,29 @@ func execute(file string, sysConf int) {
 	case EventHub:
 		eh, err = event_hub.NewEventHub(ctx, wg, conf.EventHubConfig)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal().Err(err)
 		}
 		svc = service.NewService(eh)
 	case Rabbit:
+		conf.RabbitMQConfig.ConnectionString, err = connectionString(
+			conf.RabbitMQConfig.Scheme,
+			conf.RabbitMQConfig.Host,
+			conf.RabbitMQConfig.UserName,
+			conf.RabbitMQConfig.Password,
+			conf.RabbitMQConfig.Port,
+			conf.RabbitMQConfig.Resource)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to create connection string")
+		}
 		rabbit = rabbitmq.NewRabbitMQ(conf.RabbitMQConfig)
 		// Start the rabbit
 		rabbit.Start(ctx, wg)
 		svc = service.NewService(rabbit)
 	case Mqtt:
-		cmqtt, err = mqtt.NewMqtt(conf.MqttConf, 0, ctx)
+		cmqtt, err = mqtt.NewMqtt(conf.MqttConf, 0, ctx, wg)
 		//
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal().Err(err).Msg("Failed to create connection string")
 		}
 		svc = service.NewService(cmqtt)
 	}
@@ -150,14 +163,21 @@ func execute(file string, sysConf int) {
 	svr = controller.NewController(conf.ControllerConfig, svc)
 	//svr.Test()
 
-	svr.Start(ctx, wg)
-
 	sig = make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sig
 		cancel()
 	}()
+	// start the Event generator
+	svr.Start(ctx, wgG)
+	// wait until it finishes
+	wgG.Wait()
+
+	fmt.Println("Shutting down...")
+	// then we send the cancel to all gateway we are done now
+	cancel()
+	// wait gateway to teardown there connection cleanly
 	wg.Wait()
 }
 
@@ -185,4 +205,40 @@ func openConfigFile(s string) Config {
 func processError(err error) {
 	fmt.Println(err)
 	os.Exit(2)
+}
+
+func connectionString(scheme string, base string, user string, pass string, port int, resource string) (string, error) {
+	var (
+		encodedPass string
+		encodedUser string
+		encodedRes  string
+	)
+
+	if port == 0 {
+		return "", errors.New("port is required")
+	}
+	if scheme == "" {
+		return "", errors.New("scheme is required")
+	}
+	if base == "" {
+		return "", errors.New("baseurl is required")
+	}
+	if scheme != "amqp" && scheme != "amqps" && scheme != "mqtt" && scheme != "mqtts" {
+		return "", errors.New("scheme must be amqp, amqps, mqtt or mqtts")
+	}
+
+	encodedPass = url.QueryEscape(pass)
+	encodedUser = url.QueryEscape(user)
+	encodedRes = url.QueryEscape(resource)
+	if user == "" && pass == "" {
+		return fmt.Sprintf("%s://%s:%d/%s", scheme, base, port, encodedRes), nil
+	}
+	if pass == "" {
+		return fmt.Sprintf("%s://%s@%s:%d/%s", scheme, encodedUser, base, port, encodedRes), nil
+	}
+	if user == "" {
+		return fmt.Sprintf("%s://%s:%s@%s:%d/%s", scheme, encodedUser, encodedPass, base, port, encodedRes), nil
+	}
+	return fmt.Sprintf("%s://%s:%s@%s:%d/%s", scheme, encodedUser, encodedPass, base, port, encodedRes), nil
+
 }
