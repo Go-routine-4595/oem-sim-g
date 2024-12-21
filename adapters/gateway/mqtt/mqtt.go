@@ -15,11 +15,13 @@ import (
 	"time"
 )
 
+// MqttConf holds the configuration for the MQTT client.
 type MqttConf struct {
 	Connection string `yaml:"Connection"`
 	Topic      string `yaml:"Topic"`
 }
 
+// Mqtt represents an MQTT client.
 type Mqtt struct {
 	Topic    string
 	MgtUrl   string
@@ -31,17 +33,17 @@ type Mqtt struct {
 
 func NewMqtt(conf MqttConf, logl int, ctx context.Context, wg *sync.WaitGroup) (*Mqtt, error) {
 	var (
-		err error
-		l   zerolog.Logger
-		cid uuid.UUID
-		//opt *pmqtt.ClientOptions
+		err        error
+		cid        uuid.UUID
+		mqttClient *Mqtt
+		l          zerolog.Logger
 	)
 
 	wg.Add(1)
 
-	l = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).Level(zerolog.InfoLevel+zerolog.Level(logl)).With().Timestamp().Int("pid", os.Getpid()).Logger()
 	cid = uuid.NewV4()
-	c := &Mqtt{
+	l = createLogger(logl)
+	mqttClient = &Mqtt{
 		Topic:    conf.Topic,
 		MgtUrl:   conf.Connection,
 		logger:   l,
@@ -58,26 +60,37 @@ func NewMqtt(conf MqttConf, logl int, ctx context.Context, wg *sync.WaitGroup) (
 			SetOnConnectHandler(ConnectHandler(l)),
 	}
 
-	//opt.AddBroker("ssl://broker.emqx.io:8883")
+	mqttClient.setupContextListener(ctx, wg)
 
-	//c.opt.AddBroker("tcp://broker.hivemq.com:1883")
-
-	go func() {
-		<-ctx.Done()
-		c.client.Disconnect(250)
-		wg.Done()
-		c.logger.Warn().Msg("Mqtt disconnect")
-	}()
-
-	err = c.Connect()
-	if err == nil {
-		c.test()
+	err = mqttClient.Connect()
+	if err != nil {
+		return mqttClient, err
 	}
 
-	return c, err
+	mqttClient.publishTestMessage()
+
+	return mqttClient, err
 }
 
-func (m *Mqtt) test() {
+// createLogger initializes a zerolog.Logger with standard settings.
+func createLogger(logLevel int) zerolog.Logger {
+	return zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).
+		Level(zerolog.InfoLevel+zerolog.Level(logLevel)).
+		With().Timestamp().Int("pid", os.Getpid()).Logger()
+}
+
+// setupContextListener ensures proper disconnection when the context is canceled.
+func (m *Mqtt) setupContextListener(ctx context.Context, wg *sync.WaitGroup) {
+	go func() {
+		<-ctx.Done()
+		m.client.Disconnect(250)
+		wg.Done()
+		m.logger.Warn().Msg("Mqtt disconnected")
+	}()
+}
+
+// publishTestMessage sends a test message to a predefined topic to verify the MQTT connection.
+func (m *Mqtt) publishTestMessage() {
 
 	dump := struct {
 		Message string `json:"message"`
